@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-tunnel_barrier_video.py
-========================
-Équation de Schrödinger 1D + barrière + vidéo (Crank-Nicolson)
-"""
-
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
@@ -12,18 +5,17 @@ from dataclasses import dataclass
 
 from PaquetOndeGauss_3G import GausWP
 
-
-# ===========================================================================
-# 1. PARAMÈTRES
-# ===========================================================================
 @dataclass
 class Params:
+    """
+        Classe pour poser les bases et pour facilité la modifications des données si nécessaire
+    """
     hbar: float = 1.0
     m: float = 1.0
     k0: float = 3.0
     sigma: float = 1.5
 
-    V0: float = 6.0
+    V0: float = 1.0 
     a: float = 1.0
     x_bar: float = 0.0
 
@@ -35,11 +27,10 @@ class Params:
 
     x0: float = -20.0
 
-
-# ===========================================================================
-# 2. GRILLES
-# ===========================================================================
-def make_grids(p):
+def make_grids(p:Params) -> tuple[np.ndarray, np.ndarray, float, float]:
+    """
+        Génère les grilles spatiale et temporelle de la simulation.
+    """
     x = np.linspace(p.x_min, p.x_max, p.nx)
     t = np.linspace(0, p.t_max, p.nt)
     dx = x[1] - x[0]
@@ -48,21 +39,25 @@ def make_grids(p):
     assert dt < 0.01, "dt trop grand, instable"
     return x, t, dx, dt
 
-
-# ===========================================================================
-# 3. POTENTIEL
-# ===========================================================================
-def make_potential(x, p):
+def make_potential(x:np.ndarray, p:Params) -> tuple[np.ndarray]:
+    """
+        Construit un potentiel rectangulaire (barrière ou puits).
+        Le potentiel vaut V0 dans l'intervalle [x_bar, x_bar + a],
+        et 0 ailleurs.
+    """
     V = np.zeros_like(x)
     mask = (x >= p.x_bar) & (x <= p.x_bar + p.a)
     V[mask] = p.V0
     return V
 
+def build_CN_matrices(V, dx, dt, p) -> tuple[np.ndarray,np.ndarray]:
+    """
+        Construit les matrices du schéma de Crank-Nicolson
+        pour l'équation de Schrödinger 1D.
 
-# ===========================================================================
-# 4. CRANK-NICOLSON
-# ===========================================================================
-def build_CN_matrices(V, dx, dt, p):
+        Discrétisation implicite du type :
+            (L) ψ^{n+1} = (R) ψ^n
+    """
     n = len(V)
     r = 1j * p.hbar * dt / (4 * p.m * dx**2)
 
@@ -79,30 +74,35 @@ def build_CN_matrices(V, dx, dt, p):
 
     return ab, diag_R, off_R
 
+def apply_R(psi, diag_R, off_R)-> tuple[np.ndarray]:
+    """
+        Applique l'opérateur de droite R à ψ^n.
 
-def apply_R(psi, diag_R, off_R):
+        Calcule le membre de droite du schéma Crank-Nicolson :
+            rhs = R ψ
+    """
     rhs = diag_R * psi
     rhs[:-1] += off_R * psi[1:]
     rhs[1:] += off_R * psi[:-1]
     return rhs
 
-
-def solve_thomas(lower, main, upper, d):
+def solve_thomas(lower, main, upper, d)-> tuple[np.ndarray,np.ndarray]:
+    """
+        Résout un système tridiagonal par l'algorithme de Thomas.
+        Résout Ax = d où A est tridiagonale.
+    """
     n = len(d)
     c = np.zeros(n-1, dtype=complex)
     d_ = np.zeros(n, dtype=complex)
 
-    denom = main[0]
-    c[0] = upper[0] / denom
-    d_[0] = d[0] / denom
+    c[0] = upper[0] / main[0]
+    d_[0] = d[0] / main[0]
 
-    for i in range(1, n-1):
+    for i in range(1, n):
         denom = main[i] - lower[i-1] * c[i-1]
-        c[i] = upper[i] / denom
+        if i < n - 1:
+            c[i] = upper[i] / denom
         d_[i] = (d[i] - lower[i-1] * d_[i-1]) / denom
-
-    denom = main[-1] - lower[-1] * c[-1]
-    d_[-1] = (d[-1] - lower[-1] * d_[-2]) / denom
 
     x = np.zeros(n, dtype=complex)
     x[-1] = d_[-1]
@@ -112,8 +112,16 @@ def solve_thomas(lower, main, upper, d):
 
     return x
 
-
 def evolve_CN(psi0, V, dx, dt, nt, p, save_every=10):
+    """
+            Fait évoluer la fonction d'onde dans le temps avec le schéma de Crank-Nicolson.
+
+        Chaque pas de itération :
+        1. Calcul du second membre
+        2. Application des conditions aux bords
+        3. Résolution du système tridiagonal
+        4. Stockage périodique des densités de probabilité
+    """
     ab, diag_R, off_R = build_CN_matrices(V, dx, dt, p)
 
     upper = ab[0, 1:]
@@ -142,11 +150,14 @@ def evolve_CN(psi0, V, dx, dt, nt, p, save_every=10):
 
     return np.array(snaps), np.array(times)
 
-
-# ===========================================================================
-# 5. SIMULATION
-# ===========================================================================
 def run_simulation(p):
+    """
+        Initialise la simulation complète :
+        - grille
+        - potentiel
+        - état initial (paquet d'onde gaussien)
+        - évolution temporelle
+    """
     x, t, dx, dt = make_grids(p)
     V = make_potential(x, p)
 
@@ -165,16 +176,14 @@ def run_simulation(p):
 
     return x, V, snaps, times
 
-
-# ===========================================================================
-# 6. VIDÉO
-# ===========================================================================
 def make_video(x, snaps, V, times, p, filename="tunnel.gif"):
+    """
+        Génère une animation de l'évolution de |ψ(x,t)|²
+        avec affichage de la barrière de potentiel.
+        Sauvegarde un fichier GIF.
+    """
     fig, ax = plt.subplots(figsize=(12, 6))
-
-    # =========================
     # Barrière de potentiel
-    # =========================
     V_plot = np.zeros_like(V)
     if np.max(V) > 0:
         V_plot = V / np.max(V) * (0.3 * np.max(snaps))  # mise à l'échelle propre
@@ -187,10 +196,7 @@ def make_video(x, snaps, V, times, p, filename="tunnel.gif"):
         alpha=0.5,
         label=r"Barrière $V_0$"
     )
-
-    # =========================
     # Courbe initiale
-    # =========================
     line, = ax.plot(
         x,
         snaps[0],
@@ -198,21 +204,15 @@ def make_video(x, snaps, V, times, p, filename="tunnel.gif"):
         color="#3b2c7a",
         label=r"Num $t = 0.0$"
     )
-
-    # =========================
     # Texte temps (propre)
-    # =========================
     time_text = ax.text(
         0.02, 0.95,
         "",
         transform=ax.transAxes
     )
-
-    # =========================
-    # Axes style (comme ton image)
-    # =========================
+    # Axes style
     ax.set_xlim(x.min(), x.max())
-    ax.set_ylim(0, 1.5 * np.percentile(snaps, 99.5))
+    ax.set_ylim(0.0,0.8)
 
     ax.set_xlabel("x (u.a.)")
     ax.set_ylabel(r"$|\Psi(x,t)|^2$")
@@ -220,15 +220,11 @@ def make_video(x, snaps, V, times, p, filename="tunnel.gif"):
 
     ax.grid(alpha=0.25)
     ax.legend(loc="upper right")
-
-    # =========================
     # Animation
-    # =========================
     def update(i):
         line.set_data(x, snaps[i])
         time_text.set_text(f"t = {times[i]:.2f}")
         return line, time_text
-
     ani = animation.FuncAnimation(
         fig,
         update,
@@ -236,26 +232,25 @@ def make_video(x, snaps, V, times, p, filename="tunnel.gif"):
         interval=30,
         blit=False
     )
-
     ani.save(filename, writer="pillow", fps=30)
     plt.close()
 
-
-# ===========================================================================
-# 7. MAIN
-# ===========================================================================
 def main():
     import os
     os.makedirs("resultats", exist_ok=True)
 
-    p = Params()
+    V0 = float(input("Quelle valeur de V0 voulez-vous ?\n"))
+    while(V0 < 0.0):
+        V0 = input("V0 dois être supérieur ou égal à 0")
+    print("V0 =", V0)
+
+    p = Params(V0=V0)
 
     x, V, snaps, times = run_simulation(p)
 
     make_video(x, snaps, V, times, p, "resultats/tunnel.gif")
 
     print("✓ GIF généré : resultats/tunnel.gif")
-
 
 if __name__ == "__main__":
     main()
