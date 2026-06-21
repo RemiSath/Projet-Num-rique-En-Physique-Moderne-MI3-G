@@ -1,3 +1,11 @@
+####------Projet-partie-4-----###
+#Équation de Schrödinger 1D + barrière + vidéo (Crank-Nicolson)
+#auteur : Alexis DUMAIRE - Rémi SATHTHIRYAN - Alexandre BERNARD
+#contributeur Claude de Anthropic AI pour consolider le code et ameliorer la representation graphique (21/06/2026 version non payante)
+#date creation : 18 juin 2026
+#version 1 : 21 juin 2026
+###
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
