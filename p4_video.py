@@ -3,7 +3,7 @@
 #auteur : Alexis DUMAIRE - Rémi SATHTHIRYAN - Alexandre BERNARD
 #contributeur Claude de Anthropic AI pour consolider le code et ameliorer la representation graphique (21/06/2026 version non payante)
 #date creation : 18 juin 2026
-#version 1 : 21 juin 2026
+#version 2 : 21 juin 2026
 ###
 
 import numpy as np
@@ -138,8 +138,10 @@ def evolve_CN(psi0, V, dx, dt, nt, p, save_every=10):
         psi = solve_thomas(lower, main, upper, rhs)
         psi[0] = psi[-1] = 0
         norm = np.sum(np.abs(psi)**2) * dx
+        """
         if i % 100 == 0:
             print(f"t = {i*dt:.3f} | norm = {norm:.6f}")
+        """
         if i % save_every == 0:
             snaps.append(np.abs(psi)**2)
             times.append(i * dt)
@@ -163,7 +165,7 @@ def run_simulation(p):
         hbar=p.hbar,
         m=p.m
     )
-    print("Norme initiale:", np.sum(np.abs(psi0)**2) * dx)
+    # print("Norme initiale:", np.sum(np.abs(psi0)**2) * dx)
     snaps, times = evolve_CN(psi0, V, dx, dt, p.nt, p, save_every=10)
     return x, V, snaps, times
 
@@ -240,12 +242,11 @@ def compute_arrival_time(prob_snapshots, times, x, x_detect):
     flux = np.gradient(prob_right, times)
     # On conserve seulement le flux vers la droite
     flux_positive = np.maximum(flux, 0.0)
-    flux_total = np.trapz(flux_positive, times)
+    flux_total = np.trapezoid(flux_positive, times)
     if flux_total < 1e-10:
         return np.nan
-    tau = np.trapz(times * flux_positive, times) / flux_total
+    tau = np.trapezoid(times * flux_positive, times) / flux_total
     return tau
-
 
 def transmission_finale(prob_snapshots, x, p):
     """
@@ -255,8 +256,7 @@ def transmission_finale(prob_snapshots, x, p):
     mask = x > (p.x_bar + p.a)
     return np.sum(prob_snapshots[-1, mask]) * dx
 
-
-def make_free_reference(p, save_every=5, detector_offset=1.0):
+def make_free_reference(p, detector_offset=1.0):
     """
     Calcule les temps dans le cas libre V0 = 0.
     Cette référence est utilisée pour tau0,num et tau_t,num.
@@ -283,9 +283,7 @@ def make_free_reference(p, save_every=5, detector_offset=1.0):
         "tau_path_free": tau_path_free
     }
 
-
-def measure_tunnel_time(p, free_reference=None,
-                        save_every=5, detector_offset=1.0):
+def measure_tunnel_time(p, free_reference=None , detector_offset=1.0):
     """
     Mesure tau_t,num avec deux détecteurs.
 
@@ -313,7 +311,6 @@ def measure_tunnel_time(p, free_reference=None,
         "tau_path_free": tau_path_free,
         "T_num": T_num
     }
-
 
 def plot_tau_vs_a(a_vals, tau0_vals, taut_vals, p):
     fig, ax = plt.subplots(figsize=(7, 4))
@@ -343,7 +340,6 @@ def plot_tau_vs_V0(V0_vals, taut_vals):
     ax.grid(alpha=0.3)
     plt.tight_layout()
     return fig
-
 
 def plot_transmission_vs_V0(V0_vals, T_vals):
     fig, ax = plt.subplots(figsize=(7, 4))
@@ -386,7 +382,6 @@ def main():
     p_tun = Params(V0=6.0, a=2.0, nt=6000)
     free_ref_tun = make_free_reference(
         p_tun,
-        save_every=5
     )
     result_tun = measure_tunnel_time(
         p_tun,
@@ -407,12 +402,10 @@ def main():
         )
         reference_a = make_free_reference(
             p_a,
-            save_every=5
         )
         result_a = measure_tunnel_time(
             p_a,
             free_reference=reference_a,
-            save_every=5
         )
         tau0_vals.append(result_a["tau0_num"])
         taut_vals.append(result_a["tau_t_num"])
@@ -448,7 +441,6 @@ def main():
     ]
     reference_V0 = make_free_reference(
         p_reference,
-        save_every=5
     )
     taut_V0 = []
     T_V0 = []
@@ -460,8 +452,7 @@ def main():
         )
         result_V0 = measure_tunnel_time(
             p_V0,
-            free_reference=reference_V0,
-            save_every=5
+            free_reference=reference_V0,        
         )
         taut_V0.append(result_V0["tau_t_num"])
         T_V0.append(result_V0["T_num"])
